@@ -1,0 +1,12 @@
+# VSCODE
+
+
+# IMPORTS
+.import/
+
+
+# GODOT
+.godot/
+
+# TRASH
+.rbxsync-trash/

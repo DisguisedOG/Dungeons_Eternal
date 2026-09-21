@@ -1,0 +1,8 @@
+[gd_resource type="Environment" format=3 uid="uid://rn7lac8gk1o2"]
+
+[sub_resource type="Sky" id="1"]
+
+[resource]
+sky = SubResource("1")
+ambient_light_color = Color(1, 1, 1, 1)
+ambient_light_sky_contribution = 0.0
