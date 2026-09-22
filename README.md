@@ -1,5 +1,5 @@
 # Dungeons Eternal
 
-3D grid-crawler dungeon RPG for Godot 4.
+Modernized retro dungeon RPG for Godot 4.
 
-Started from [HeartBeast’s 3d-dungeon](https://github.com/uheartbeast/3d-dungeon) (Godot 4 port).
+3D grid-crawler with real-time warrior combat. Started from [HeartBeast’s 3d-dungeon](https://github.com/uheartbeast/3d-dungeon) (Godot 4 port).
