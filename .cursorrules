@@ -1,0 +1,27 @@
+# Godot 4.7 / GDScript Engineering Rules
+
+## 1. Core Stack & Engine Architecture
+- Engine: Godot 4.7.1-stable. Language: GDScript (.gd files).
+- Architecture: Component-based scene trees (.tscn) managed by global Singletons (Autoloads).
+- Main Autoload State: `Globals.gd` (dungeon, combat, save state) and `SaveService.gd` (disk I/O).
+- Never introduce Node.js, npm packages, web frameworks, or async/await patterns meant for web APIs. All code must execute natively within the Godot runtime loop (`_process`, `_physics_process`).
+
+## 2. UI & Design System (No Trash, No Web Placeholders)
+- Styling: Use Godot's built-in theme system (`StyleBoxTexture`, `StyleBoxFlat`, font overrides). 
+- Design Language: Handcrafted painted HD aesthetic. Use 9-sliced leather panels (`UI/Theme/leather_panel.png`), warm cream/gold/ink color tokens, and the default `Cinzel-Regular.ttf` font.
+- Never use unstyled gray boxes, raw placeholder buttons, or old pixel fonts (Press Start 2P is deprecated). Every UI element built via code (e.g., through `UI/UiKit.gd`) must instantiate proper styled panels, correct bar gradients, and iconography (`coin.png`, wax-seal art).
+
+## 3. Data Flow & State Management
+- Global Store: `Globals.gd` is the single source of truth for runtime state (Hero stats, dungeon progression, combat states).
+- UI & World Nodes: Dumb visual views. They never own game state; they call methods on `Globals` (e.g., `Globals.try_melee_hit()`) and update via Godot Signals (`player_hp_changed`, `hero_changed`).
+- Persistence: Disk I/O (`user://savegame.json`, `user://settings.cfg`) belongs exclusively in `SaveService.gd`. Gameplay scripts must call `Globals`, never touch `FileAccess` directly.
+
+## 4. Real-Time Combat (`rt_combat`) Standards
+- Frame-rate independence: All real-time movement, hitboxes, cooldowns, and timers must scale cleanly with `delta` in `_physics_process(delta)` or use Godot `SceneTreeTimer`. Never hardcode frame-count checks.
+- Signal decoupling: Combat systems must communicate damage, parries, and state changes via signals rather than tight cross-node coupling.
+- Spatial math: Use proper Vector3/Vector2 Godot math methods (`clamp`, `lerp`, `move_toward`, dot products for facing angles).
+
+## 5. Coding & Formatting Constraints (GDScript)
+- Strongly type your GDScript variables and function signatures (e.g., `func take_damage(amount: int) -> void:`).
+- Keep scripts modular; split complex logic into helper scripts inside `Data/` or dedicated custom resource types (`.tres`).
+- Never leave orphaned nodes or dangling signal connections. Clean up connections in `_exit_tree()` or use auto-disconnect patterns where applicable.
