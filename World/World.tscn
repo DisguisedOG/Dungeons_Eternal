@@ -1,6 +1,6 @@
-[gd_scene load_steps=6 format=3 uid="uid://dhbtvdcyqqf3v"]
+[gd_scene format=3 uid="uid://dhbtvdcyqqf3v"]
 
-[ext_resource type="Script" path="res://World/World.gd" id="1_bir71"]
+[ext_resource type="Script" uid="uid://coyjj0agq277l" path="res://World/World.gd" id="1_bir71"]
 [ext_resource type="PackedScene" uid="uid://c7p25t2sr4jga" path="res://Map/Map.tscn" id="2_ebswp"]
 [ext_resource type="PackedScene" uid="uid://ddaghmfxd3811" path="res://Player/Player.tscn" id="3_0p0t3"]
 
@@ -9,13 +9,13 @@
 [sub_resource type="CameraAttributesPractical" id="CameraAttributesPractical_0oyk3"]
 dof_blur_far_enabled = true
 
-[node name="World" type="Node3D"]
+[node name="World" type="Node3D" unique_id=1928200354]
 script = ExtResource("1_bir71")
 Map = ExtResource("2_ebswp")
 
-[node name="Player" parent="." instance=ExtResource("3_0p0t3")]
+[node name="Player" parent="." unique_id=294741721 instance=ExtResource("3_0p0t3")]
 transform = Transform3D(-4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, 0, 0, 0)
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1772745007]
 environment = SubResource("Environment_p6vq2")
 camera_attributes = SubResource("CameraAttributesPractical_0oyk3")

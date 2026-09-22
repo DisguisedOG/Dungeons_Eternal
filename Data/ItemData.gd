@@ -31,6 +31,14 @@ const ITEMS := {
 		"name": "Shadow Hide", "kind": "loot", "slot": "", "stack": 10, "rarity": "uncommon",
 		"desc": "Still-warm pelt from the beast.", "effects": {},
 	},
+	"iron_sword": {
+		"name": "Iron Sword", "kind": "equipment", "slot": "weapon", "stack": 1, "rarity": "common",
+		"desc": "A straight blade. Warrior's starting steel. +2 ATK.", "effects": {"attack": 2},
+	},
+	"oak_shield": {
+		"name": "Oak Shield", "kind": "equipment", "slot": "offhand", "stack": 1, "rarity": "common",
+		"desc": "Bossed oak and iron. Hold RMB to block, tap as a blow lands to parry. +1 DEF, +8 Stamina.", "effects": {"defense": 1, "stamina": 8, "block": 6},
+	},
 	"rusty_blade": {
 		"name": "Rusty Blade", "kind": "equipment", "slot": "weapon", "stack": 1, "rarity": "uncommon",
 		"desc": "Notched iron. +2 ATK.", "effects": {"attack": 2},

@@ -13,6 +13,7 @@ const FRAME := Color(0.52, 0.38, 0.22, 1)
 const HP_FILL := Color(0.74, 0.18, 0.24)
 const MP_FILL := Color(0.22, 0.46, 0.86)
 const XP_FILL := Color(0.82, 0.64, 0.22)
+const STAMINA_FILL := Color(0.42, 0.78, 0.32)
 const SLIME_FILL := Color(0.32, 0.86, 0.34)
 
 const TEX_LEATHER := preload("res://UI/Theme/leather_panel.png")

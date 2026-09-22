@@ -14,6 +14,7 @@ var _gold_label: Label
 var _extra_skills: Label
 var _hp_bar
 var _mp_bar
+var _stamina_bar
 var _xp_bar
 var _msg_label: Label
 var _enemy: PanelContainer
@@ -41,6 +42,7 @@ func _ready() -> void:
 	_build()
 	Globals.player_hp_changed.connect(_on_hp_changed)
 	Globals.player_mp_changed.connect(_on_mp_changed)
+	Globals.player_stamina_changed.connect(_on_stamina_changed)
 	Globals.monster_hp_changed.connect(_on_monster_hp)
 	Globals.message_changed.connect(_on_message_changed)
 	Globals.hero_changed.connect(_refresh_identity)
@@ -52,6 +54,7 @@ func _ready() -> void:
 	_refresh_identity()
 	_on_hp_changed(Globals.player_hp, Globals.hero.max_hp())
 	_on_mp_changed(Globals.player_mp, Globals.hero.max_mp())
+	_on_stamina_changed(Globals.player_stamina, Globals.max_stamina())
 	_on_message_changed(Globals.message)
 	_refresh_enemy()
 	_apply_hud_scale()
@@ -228,6 +231,9 @@ func _build_vitals(root: Control) -> void:
 	_mp_bar = StatBarScript.new()
 	_mp_bar.configure(400, 26, UiKit.MP_FILL)
 	col.add_child(_mp_bar)
+	_stamina_bar = StatBarScript.new()
+	_stamina_bar.configure(400, 22, UiKit.STAMINA_FILL)
+	col.add_child(_stamina_bar)
 	_xp_bar = StatBarScript.new()
 	_xp_bar.configure(400, 20, UiKit.XP_FILL)
 	col.add_child(_xp_bar)
@@ -412,7 +418,7 @@ func _build_bag(root: Control) -> void:
 	gear.add_child(UiKit.make_label("BAG", 26, UiKit.GOLD))
 	_bag_gold = UiKit.make_label("", 16, UiKit.GOLD)
 	gear.add_child(_bag_gold)
-	for slot in ["weapon", "armor", "accessory"]:
+	for slot in ["weapon", "offhand", "armor", "accessory"]:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 4)
 		gear.add_child(row)
@@ -566,9 +572,9 @@ func _refresh_bag() -> void:
 	if h == null:
 		return
 	_bag_gold.text = "Gold  %d" % h.gold
-	for slot in ["weapon", "armor", "accessory"]:
+	for slot in ["weapon", "offhand", "armor", "accessory"]:
 		var label: Label = _gear_labels[slot]
-		label.text = "%s: %s" % [slot.capitalize(), h.equipped_name(slot)]
+		label.text = "%s: %s" % [_slot_title(slot), h.equipped_name(slot)]
 	for i in _slot_buttons.size():
 		var button: Button = _slot_buttons[i]
 		if i < h.inventory.size():
@@ -597,10 +603,10 @@ func _refresh_bag() -> void:
 
 func _refresh_sheet() -> void:
 	var h = Globals.hero
-	_sheet_stats.text = "%s  %s  Lv %d\nSTR %d  DEX %d  INT %d  LUK %d\nHP %d/%d  MP %d/%d\nATK %d  DEF %d  Dodge %d%%\nStat pts %d   Skill pts %d" % [
+	_sheet_stats.text = "%s  %s  Lv %d\nSTR %d  DEX %d  INT %d  LUK %d\nHP %d/%d  MP %d/%d  STA %d/%d\nATK %d  DEF %d  Dodge %d%%\nStat pts %d   Skill pts %d" % [
 		h.hero_name, h.class_name_pretty(), h.level,
 		h.total_str(), h.total_dex(), h.total_int(), h.total_luk(),
-		h.hp, h.max_hp(), h.mp, h.max_mp(),
+		h.hp, h.max_hp(), h.mp, h.max_mp(), int(Globals.player_stamina), h.max_stamina(),
 		h.attack_power(), h.defense(), h.dodge_chance(),
 		h.stat_points, h.skill_points
 	]
@@ -618,6 +624,7 @@ func _refresh_identity() -> void:
 	_refresh_extra_skills(h)
 	_on_hp_changed(Globals.player_hp, h.max_hp())
 	_on_mp_changed(Globals.player_mp, h.max_mp())
+	_on_stamina_changed(Globals.player_stamina, Globals.max_stamina())
 	_refresh_enemy()
 	if _bag.visible:
 		_refresh_bag()
@@ -638,6 +645,24 @@ func _on_hp_changed(hp: int, max_hp: int) -> void:
 
 func _on_mp_changed(mp: int, max_mp: int) -> void:
 	_mp_bar.set_amount(float(mp), float(max_mp), "MP  %d/%d" % [mp, max_mp])
+
+
+func _on_stamina_changed(stamina: float, max_stamina: float) -> void:
+	if _stamina_bar == null:
+		return
+	var melee := Globals.uses_realtime_melee()
+	_stamina_bar.visible = melee
+	if not melee:
+		return
+	_stamina_bar.set_amount(stamina, max_stamina, "STA  %d/%d" % [int(round(stamina)), int(round(max_stamina))])
+
+
+func _slot_title(slot: String) -> String:
+	match slot:
+		"offhand":
+			return "Shield"
+		_:
+			return slot.capitalize()
 
 
 func _on_monster_hp(_hp: int, _max_hp: int) -> void:

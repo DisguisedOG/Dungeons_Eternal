@@ -13,6 +13,7 @@ var _glow: OmniLight3D
 var _alive := true
 var _idle := 0.0
 var _hit_punch := 0.0
+var _windup := 0.0
 var _model_scale := 0.24
 
 
@@ -23,6 +24,8 @@ func _ready() -> void:
 		return
 	Globals.encounter_hit.connect(_on_hit)
 	Globals.encounter_died.connect(_on_died_id)
+	Globals.encounter_windup.connect(_on_windup)
+	Globals.parry_succeeded.connect(_on_parried)
 
 
 func _process(delta: float) -> void:
@@ -31,13 +34,17 @@ func _process(delta: float) -> void:
 	_idle += delta
 	if not _alive:
 		return
+	if _windup > 0.0:
+		_windup = maxf(_windup - delta, 0.0)
 	var wobble := sin(_idle * 2.4)
+	var lunge := _windup * 0.55
 	_body.position.y = wobble * 0.045
+	_body.position.z = -lunge
 	var squash := 1.0 + wobble * 0.035
 	var tall := 1.0 - wobble * 0.03
 	if _hit_punch > 0.0:
 		_hit_punch = maxf(_hit_punch - delta * 4.0, 0.0)
-	_body.scale = Vector3(squash + _hit_punch * 0.12, tall - _hit_punch * 0.18, squash + _hit_punch * 0.12)
+	_body.scale = Vector3(squash + _hit_punch * 0.12 + lunge * 0.2, tall - _hit_punch * 0.18 + lunge * 0.15, squash + _hit_punch * 0.12)
 
 
 func _build() -> void:
@@ -85,6 +92,7 @@ func _make_slime_material(data: Dictionary) -> StandardMaterial3D:
 func _on_hit(id: int) -> void:
 	if id != encounter_id or not _alive:
 		return
+	_windup = 0.0
 	_hit_punch = 1.0
 	var tween := create_tween()
 	tween.tween_property(_body, "position:z", 0.16, 0.07)
@@ -94,6 +102,32 @@ func _on_hit(id: int) -> void:
 		var flash := create_tween()
 		flash.tween_property(_glow, "light_energy", energy * 2.4, 0.06)
 		flash.tween_property(_glow, "light_energy", energy, 0.2)
+
+
+func _on_windup(id: int) -> void:
+	if id != encounter_id or not _alive:
+		return
+	_windup = 0.42
+	if _glow:
+		var energy := _glow.light_energy
+		var flash := create_tween()
+		flash.tween_property(_glow, "light_energy", energy * 1.8, 0.12)
+		flash.tween_property(_glow, "light_energy", energy, 0.28)
+
+
+func _on_parried(id: int) -> void:
+	if id != encounter_id or not _alive:
+		return
+	_windup = 0.0
+	_hit_punch = 1.2
+	var tween := create_tween()
+	tween.tween_property(_body, "position:z", 0.32, 0.08)
+	tween.tween_property(_body, "position:z", 0.0, 0.28)
+	if _glow:
+		var energy := _glow.light_energy
+		var flash := create_tween()
+		flash.tween_property(_glow, "light_energy", energy * 3.2, 0.05)
+		flash.tween_property(_glow, "light_energy", energy, 0.25)
 
 
 func _on_died_id(id: int) -> void:
@@ -109,6 +143,10 @@ func _on_died() -> void:
 		Globals.encounter_hit.disconnect(_on_hit)
 	if Globals.encounter_died.is_connected(_on_died_id):
 		Globals.encounter_died.disconnect(_on_died_id)
+	if Globals.encounter_windup.is_connected(_on_windup):
+		Globals.encounter_windup.disconnect(_on_windup)
+	if Globals.parry_succeeded.is_connected(_on_parried):
+		Globals.parry_succeeded.disconnect(_on_parried)
 	var tween := create_tween()
 	tween.set_parallel(true)
 	tween.tween_property(_body, "scale", Vector3(1.55, 0.12, 1.55), 0.75)

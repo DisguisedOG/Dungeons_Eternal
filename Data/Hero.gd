@@ -20,7 +20,7 @@ var skill_points: int = 1
 var skills: Dictionary = {}
 var gold: int = 0
 var inventory: Array = []
-var equipped: Dictionary = {"weapon": "", "armor": "", "accessory": ""}
+var equipped: Dictionary = {"weapon": "", "offhand": "", "armor": "", "accessory": ""}
 
 
 func setup(p_name: String, p_class: String) -> void:
@@ -47,7 +47,10 @@ func setup(p_name: String, p_class: String) -> void:
 func _grant_starter() -> void:
 	gold = 15
 	inventory = [{"id": "healing_vial", "count": 2}]
-	equipped = {"weapon": "", "armor": "", "accessory": ""}
+	equipped = {"weapon": "", "offhand": "", "armor": "", "accessory": ""}
+	if class_id == "warrior":
+		equipped["weapon"] = "iron_sword"
+		equipped["offhand"] = "oak_shield"
 
 
 func class_name_pretty() -> String:
@@ -192,6 +195,22 @@ func defense() -> int:
 
 func dodge_chance() -> int:
 	return clampi(total_luk() * 2 + bonus("dodge"), 0, 65)
+
+
+func max_stamina() -> int:
+	return 40 + total_str() * 3 + bonus("stamina") + gear_bonus("stamina")
+
+
+func block_power() -> int:
+	return 4 + gear_bonus("block") + int(total_str() / 4.0)
+
+
+func has_weapon() -> bool:
+	return str(equipped.get("weapon", "")) != ""
+
+
+func has_shield() -> bool:
+	return str(equipped.get("offhand", "")) != ""
 
 
 func active_skills() -> Array:
@@ -380,9 +399,15 @@ static func from_dict(data: Dictionary):
 		var eq: Dictionary = data.get("equipped", {})
 		hero.equipped = {
 			"weapon": str(eq.get("weapon", "")),
+			"offhand": str(eq.get("offhand", "")),
 			"armor": str(eq.get("armor", "")),
 			"accessory": str(eq.get("accessory", "")),
 		}
+		if hero.class_id == "warrior":
+			if str(hero.equipped.get("weapon", "")) == "":
+				hero.equipped["weapon"] = "iron_sword"
+			if str(hero.equipped.get("offhand", "")) == "":
+				hero.equipped["offhand"] = "oak_shield"
 	else:
 		hero._grant_starter()
 	hero.hp = int(data.get("hp", hero.max_hp()))

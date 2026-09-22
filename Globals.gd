@@ -26,11 +26,29 @@ signal menu_changed
 signal loot_changed
 signal facing_changed(value: bool)
 signal settings_changed
+signal player_stamina_changed(stamina: float, max_stamina: float)
+signal guard_broken
+signal parry_succeeded(id: int)
+signal encounter_windup(id: int)
 
 const GRID_SIZE = 2
 const ATTACK_COOLDOWN := 0.55
 const MENU_SCENE := "res://UI/MainMenu.tscn"
 const WORLD_SCENE := "res://World/World.tscn"
+const STAMINA_REGEN := 20.0
+const STAMINA_REGEN_DELAY := 0.48
+const BLOCK_DRAIN := 13.0
+const BLOCK_HIT_COST := 14.0
+const MONSTER_FIRST_STRIKE := 1.05
+const MONSTER_STRIKE_GAP := 1.55
+const MONSTER_WINDUP := 0.42
+const LIGHT_STAMINA := [8.0, 10.0, 14.0]
+const POWER_STAMINA := 24.0
+const PARRY_WINDOW := 0.24
+const PARRY_COOLDOWN := 0.6
+const PARRY_STAGGER := 1.75
+const RIPOSTE_WINDOW := 1.1
+const RIPOSTE_MULT := 1.8
 
 var hero
 var player_hp: int
@@ -62,9 +80,18 @@ var encounters: Array = []
 var facing_id := -1
 var use_authored_map := true
 var tutorial_active := false
+var player_stamina := 0.0
+var is_blocking := false
 
 var _cooldown := 0.0
 var _attack_token := 0
+var _stamina_delay := 0.0
+var _monster_strike_in := 0.0
+var _guard_stun := 0.0
+var parry_window := 0.0
+var riposte_until := 0.0
+var _parry_cd := 0.0
+var _windup_sent := false
 
 
 func _ready() -> void:
@@ -77,6 +104,16 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if _cooldown > 0.0:
 		_cooldown = maxf(_cooldown - delta, 0.0)
+	if _guard_stun > 0.0:
+		_guard_stun = maxf(_guard_stun - delta, 0.0)
+	if parry_window > 0.0:
+		parry_window = maxf(parry_window - delta, 0.0)
+	if riposte_until > 0.0:
+		riposte_until = maxf(riposte_until - delta, 0.0)
+	if _parry_cd > 0.0:
+		_parry_cd = maxf(_parry_cd - delta, 0.0)
+	_tick_stamina(delta)
+	_tick_monster_ai(delta)
 
 
 func apply_settings() -> void:
@@ -248,7 +285,106 @@ func set_menu_open(value: bool) -> void:
 
 
 func is_busy() -> bool:
-	return game_over or _cooldown > 0.0 or menu_open
+	return game_over or (not uses_realtime_melee() and _cooldown > 0.0) or menu_open or _guard_stun > 0.0
+
+
+func uses_realtime_melee() -> bool:
+	ensure_hero()
+	return hero != null and str(hero.class_id) == "warrior"
+
+
+func max_stamina() -> float:
+	ensure_hero()
+	return float(hero.max_stamina())
+
+
+func fill_stamina() -> void:
+	player_stamina = max_stamina()
+	_stamina_delay = 0.0
+	_emit_stamina()
+
+
+func set_blocking(value: bool) -> void:
+	if not value:
+		is_blocking = false
+		return
+	if not uses_realtime_melee() or game_over or menu_open:
+		is_blocking = false
+		return
+	if hero == null or not hero.has_shield():
+		is_blocking = false
+		return
+	if player_stamina < 6.0:
+		is_blocking = false
+		return
+	is_blocking = true
+
+
+func spend_stamina(amount: float) -> bool:
+	if amount <= 0.0:
+		return true
+	if player_stamina + 0.001 < amount:
+		return false
+	player_stamina = maxf(player_stamina - amount, 0.0)
+	_stamina_delay = STAMINA_REGEN_DELAY
+	_emit_stamina()
+	return true
+
+
+func begin_parry() -> bool:
+	if not uses_realtime_melee() or game_over or menu_open:
+		return false
+	if hero == null or not hero.has_shield():
+		return false
+	if _parry_cd > 0.0:
+		return false
+	parry_window = PARRY_WINDOW
+	_parry_cd = PARRY_COOLDOWN
+	return true
+
+
+func in_parry_window() -> bool:
+	return parry_window > 0.0 and hero != null and hero.has_shield()
+
+
+func consume_riposte() -> float:
+	if riposte_until <= 0.0:
+		return 1.0
+	riposte_until = 0.0
+	return RIPOSTE_MULT
+
+
+func light_stamina_cost(combo_step: int) -> float:
+	var idx := clampi(combo_step, 0, LIGHT_STAMINA.size() - 1)
+	return float(LIGHT_STAMINA[idx])
+
+
+func try_melee_hit(multiplier: float, label: String) -> bool:
+	if game_over or menu_open:
+		return false
+	ensure_hero()
+	var enc := facing_encounter()
+	if enc.is_empty():
+		return false
+	var riposte := consume_riposte()
+	var damage := maxi(1, int(round(float(hero.attack_power()) * multiplier * riposte)))
+	if riposte > 1.0:
+		label = "Riposte"
+	enc["hp"] = maxi(int(enc["hp"]) - damage, 0)
+	_write_encounter(enc)
+	monster_hp = int(enc["hp"])
+	monster_max_hp = int(enc["max_hp"])
+	player_attacked.emit()
+	encounter_hit.emit(int(enc["id"]))
+	monster_hp_changed.emit(monster_hp, monster_max_hp)
+	var leech: int = int(hero.bonus("lifesteal"))
+	if leech > 0:
+		_heal_player(leech)
+	if int(enc["hp"]) == 0:
+		_defeat_monster(int(enc["id"]))
+		return true
+	_set_message("%s  %s." % [label, str(enc.get("name", "Beast"))])
+	return true
 
 
 func is_monster_cell(cell: Vector2i) -> bool:
@@ -339,7 +475,8 @@ func try_combat(skill_id: String = "") -> bool:
 		return true
 	if did_damage:
 		_set_message("You strike.")
-		get_tree().create_timer(0.32).timeout.connect(func() -> void: _monster_counter(token), CONNECT_ONE_SHOT)
+		if not uses_realtime_melee():
+			get_tree().create_timer(0.32).timeout.connect(func() -> void: _monster_counter(token), CONNECT_ONE_SHOT)
 	return true
 
 
@@ -416,6 +553,14 @@ func _apply_plan(plan: Dictionary, heal: bool) -> void:
 		hero.restore_full()
 	player_hp = hero.hp
 	player_mp = hero.mp
+	is_blocking = false
+	_monster_strike_in = 0.0
+	_guard_stun = 0.0
+	parry_window = 0.0
+	riposte_until = 0.0
+	_parry_cd = 0.0
+	_windup_sent = false
+	fill_stamina()
 	_set_message(_start_message())
 	_emit_vitals()
 	monster_hp_changed.emit(monster_hp, monster_max_hp)
@@ -423,6 +568,8 @@ func _apply_plan(plan: Dictionary, heal: bool) -> void:
 
 func _start_message() -> String:
 	if tutorial_active:
+		if uses_realtime_melee():
+			return "Tutorial: WASD to step, Q/E to turn. LMB slash, hold LMB power, RMB hold to block, tap RMB as it lunges to parry."
 		return "Tutorial: WASD to step, Q/E to turn, Space to attack. [I] bag  [C] character  [Esc] pause. Oozey waits in one hall."
 	var n := alive_count()
 	var beast := "beast hunts" if n == 1 else "beasts hunt"
@@ -470,8 +617,16 @@ func _set_facing_id(id: int) -> void:
 	if game_over or menu_open:
 		return
 	if facing_monster:
+		if uses_realtime_melee():
+			_monster_strike_in = MONSTER_FIRST_STRIKE
+			_windup_sent = false
 		_set_message(_combat_prompt())
-	elif not exit_open:
+	else:
+		_monster_strike_in = 0.0
+		_windup_sent = false
+		parry_window = 0.0
+		riposte_until = 0.0
+	if not facing_monster and not exit_open:
 		if tutorial_active:
 			_set_message("Oozey waits in one hall. The stairs in the other are sealed.")
 		else:
@@ -545,22 +700,7 @@ func _heal_player(amount: int) -> int:
 func _monster_counter(token: int) -> void:
 	if token != _attack_token or game_over:
 		return
-	var enc := facing_encounter()
-	if enc.is_empty():
-		return
-	if randi() % 100 < hero.dodge_chance():
-		_set_message("You slip aside. " + _combat_prompt())
-		return
-	var incoming := maxi(1, int(enc["attack"]) - hero.defense() - ward_bonus)
-	player_hp = maxi(player_hp - incoming, 0)
-	hero.hp = player_hp
-	monster_attacked.emit()
-	player_hp_changed.emit(player_hp, hero.max_hp())
-	if player_hp == 0:
-		_die()
-	else:
-		var data: Dictionary = MobData.def(str(enc["kind"]))
-		_set_message(str(data.get("hit", "It strikes back.")) + " " + _combat_prompt())
+	_resolve_monster_strike()
 
 
 func _defeat_monster(id: int) -> void:
@@ -638,7 +778,10 @@ func _combat_prompt() -> String:
 	var enc := facing_encounter()
 	if not enc.is_empty():
 		parts.append(str(enc.get("name", "Beast")) + ".")
-	parts.append("[Space] Attack")
+	if uses_realtime_melee():
+		parts.append("[LMB] Slash  [Hold] Power  [RMB] Block  [Tap RMB] Parry")
+	else:
+		parts.append("[Space] Attack")
 	var actives: Array = hero.active_skills()
 	for i in mini(actives.size(), 3):
 		var skill: Dictionary = actives[i]
@@ -703,6 +846,14 @@ func _apply_dungeon(dungeon: Dictionary) -> void:
 	saved_rotation = Vector3(0, float(dungeon.get("rot_y", -PI / 2.0)), 0)
 	restore_transform = true
 	_load_ground_loot(dungeon.get("ground_loot", {}))
+	is_blocking = false
+	_monster_strike_in = 0.0
+	_guard_stun = 0.0
+	parry_window = 0.0
+	riposte_until = 0.0
+	_parry_cd = 0.0
+	_windup_sent = false
+	fill_stamina()
 	_set_message("The dark remembers you.")
 	monster_hp_changed.emit(monster_hp, monster_max_hp)
 	loot_changed.emit()
@@ -713,6 +864,7 @@ func _on_hero_changed() -> void:
 		return
 	player_hp = hero.hp
 	player_mp = hero.mp
+	player_stamina = minf(player_stamina, max_stamina())
 	hero_changed.emit()
 	_emit_vitals()
 
@@ -722,6 +874,104 @@ func _emit_vitals() -> void:
 		return
 	player_hp_changed.emit(player_hp, hero.max_hp())
 	player_mp_changed.emit(player_mp, hero.max_mp())
+	_emit_stamina()
+
+
+func _emit_stamina() -> void:
+	player_stamina_changed.emit(player_stamina, max_stamina())
+
+
+func _tick_stamina(delta: float) -> void:
+	if not uses_realtime_melee() or game_over or menu_open:
+		return
+	var cap := max_stamina()
+	if is_blocking:
+		player_stamina = maxf(player_stamina - BLOCK_DRAIN * delta, 0.0)
+		_stamina_delay = 0.2
+		_emit_stamina()
+		if player_stamina <= 0.05:
+			is_blocking = false
+			_guard_stun = 0.55
+			guard_broken.emit()
+			_set_message("Your arms fail. The shield drops.")
+		return
+	if _stamina_delay > 0.0:
+		_stamina_delay = maxf(_stamina_delay - delta, 0.0)
+		return
+	if player_stamina >= cap:
+		return
+	player_stamina = minf(player_stamina + STAMINA_REGEN * delta, cap)
+	_emit_stamina()
+
+
+func _tick_monster_ai(delta: float) -> void:
+	if not uses_realtime_melee() or game_over or menu_open:
+		return
+	if not facing_monster:
+		return
+	if _monster_strike_in <= 0.0:
+		_monster_strike_in = MONSTER_STRIKE_GAP
+		_windup_sent = false
+		return
+	_monster_strike_in -= delta
+	if not _windup_sent and _monster_strike_in <= MONSTER_WINDUP and _monster_strike_in > 0.0:
+		_windup_sent = true
+		encounter_windup.emit(facing_id)
+	if _monster_strike_in > 0.0:
+		return
+	_monster_strike_in = MONSTER_STRIKE_GAP
+	_windup_sent = false
+	_resolve_monster_strike()
+
+
+func _resolve_monster_strike() -> void:
+	if game_over:
+		return
+	var enc := facing_encounter()
+	if enc.is_empty():
+		return
+	if in_parry_window():
+		_land_parry(enc)
+		return
+	if randi() % 100 < hero.dodge_chance():
+		_set_message("You slip aside. " + _combat_prompt())
+		return
+	var incoming := maxi(1, int(enc["attack"]) - hero.defense() - ward_bonus)
+	var data: Dictionary = MobData.def(str(enc["kind"]))
+	var hit_text := str(data.get("hit", "It strikes."))
+	if is_blocking and hero.has_shield():
+		if spend_stamina(BLOCK_HIT_COST):
+			incoming = maxi(0, incoming - hero.block_power())
+			if incoming <= 0:
+				_set_message("The blow dies on your shield.")
+				monster_attacked.emit()
+				return
+			hit_text = "You catch some of it on the shield."
+		else:
+			is_blocking = false
+			_guard_stun = 0.7
+			guard_broken.emit()
+			hit_text = "Your guard shatters."
+	player_hp = maxi(player_hp - incoming, 0)
+	hero.hp = player_hp
+	monster_attacked.emit()
+	player_hp_changed.emit(player_hp, hero.max_hp())
+	if player_hp == 0:
+		_die()
+	else:
+		_set_message(hit_text + " " + _combat_prompt())
+
+
+func _land_parry(enc: Dictionary) -> void:
+	parry_window = 0.0
+	is_blocking = false
+	riposte_until = RIPOSTE_WINDOW
+	_monster_strike_in = PARRY_STAGGER
+	_windup_sent = false
+	player_stamina = minf(player_stamina + 10.0, max_stamina())
+	_emit_stamina()
+	parry_succeeded.emit(int(enc["id"]))
+	_set_message("Parry!  Riposte now.  " + _combat_prompt())
 
 
 func _set_message(text: String) -> void:

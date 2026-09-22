@@ -128,9 +128,9 @@ func _on_skill(skill_id: String) -> void:
 func _refresh() -> void:
 	var data := ClassData.class_def(_hero.class_id)
 	_blurb.text = str(data["blurb"])
-	_stats.text = "STR %d   DEX %d   INT %d   LUK %d\nHP %d   MP %d   ATK %d   DEF %d" % [
+	_stats.text = "STR %d   DEX %d   INT %d   LUK %d\nHP %d   MP %d   STA %d   ATK %d   DEF %d" % [
 		_hero.total_str(), _hero.total_dex(), _hero.total_int(), _hero.total_luk(),
-		_hero.max_hp(), _hero.max_mp(), _hero.attack_power(), _hero.defense()
+		_hero.max_hp(), _hero.max_mp(), _hero.max_stamina(), _hero.attack_power(), _hero.defense()
 	]
 	_tree.setup(_hero, true)
 

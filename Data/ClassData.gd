@@ -7,7 +7,7 @@ const CLASSES := {
 	"warrior": {
 		"id": "warrior",
 		"name": "Warrior",
-		"blurb": "Front-line steel. High STR and HP. Hits hard, shrugs off claws.",
+		"blurb": "Front-line steel. Starts with sword and shield. LMB slash, hold for a power cut, RMB block, tap RMB to parry.",
 		"str": 8, "dex": 4, "int": 2, "luk": 2,
 		"base_hp": 22, "base_mp": 6, "base_atk": 3, "base_def": 1,
 		"atk_stat": "str",
